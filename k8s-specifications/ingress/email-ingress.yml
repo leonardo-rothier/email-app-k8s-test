@@ -4,7 +4,6 @@ metadata:
   name: email-ingress
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
-    kubernetes.io/ingress.class: ip
 spec:
   ingressClassName: alb
   rules:
