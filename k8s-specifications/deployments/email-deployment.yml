@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: email-deployment
+  labels:
+    app: email
+    tier: back-end
+spec:
+  selector:
+    matchLabels:
+      app: email
+  replicas: 3
+  template:
+    metadata:
+      name: email
+      labels: 
+        app: email
+        type: back-end
+    spec:
+      containers:
+        - name: email-service
+          image: leonardorothier/email-service:v1
+          ports:
+            containerPort: 8080
+          env:
+            - name: GMAIL_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: gmail-credentials
+                  key: username
+            - name: GMAIL_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gmail-credentials
+                  key: password
+      restartPolicy: Always
