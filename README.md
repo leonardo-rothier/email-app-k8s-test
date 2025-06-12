@@ -59,6 +59,19 @@ kubectl apply -f k8s-specifications/services/
 kubectl get deployments,svc,pods
 ```
 
+### Monitoring
+
+For monitoring we are going to use prometheus, for this, with helm installed, run:
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+helm install prometheus prometheus-community/kube-prometheus-stack
+```
+
 ### EXTRA: EKS cluster
 If you pretend to run in a Hosted (Managed) solution as EKS, it will still works but with a slight change on the email-site-service, change the type to `LoadBalancer` and remove the `nodePort`.  
-Even better, use an ingress, is more cost-effective for multiple services. For this, your email-site-service will become a ClusterIP(default type) as we made with the backend.
+Even better, use an ingress, is more cost-effective for multiple services. For this, your email-site-service will become a ClusterIP(default type) as we made with the backend, and you will need to apply:
+```bash
+kubectl apply -f k8s-specifications/ingress/email-ingress.yml
+```

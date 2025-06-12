@@ -64,8 +64,6 @@ EOF
 dnf install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
 systemctl enable --now kubelet
 
-# FIREWALL (adjust for security or remove for labs)
-systemctl enable --now firewalld
 
 # Master recommended ports:
 firewall-cmd --permanent --add-port=6443/tcp      # Kubernetes API server
@@ -73,7 +71,15 @@ firewall-cmd --permanent --add-port=2379-2380/tcp # etcd server client API
 firewall-cmd --permanent --add-port=10250/tcp     # kubelet API
 firewall-cmd --permanent --add-port=10251/tcp     # kube-scheduler
 firewall-cmd --permanent --add-port=10252/tcp     # kube-controller-manager
-firewall-cmd --permanent --add-port=179/tcp         # enable BGP mesh between nodes
+firewall-cmd --permanent --add-port=179/tcp       # enable BGP mesh between nodes
+firewall-cmd --permanent --add-port=9100/tcp      # Node exporter (for prometheus)
+# Solve calico conflicts
+firewall-cmd --permanent --zone=trusted --add-interface="cali+"
+firewall-cmd --permanent --zone=trusted --add-interface="tunl+"
+firewall-cmd --permanent --zone=trusted --add-interface="vxlan-v6.calico"
+firewall-cmd --permanent --zone=trusted --add-interface="vxlan.calico"
+firewall-cmd --permanent --zone=trusted --add-interface="wg-v6.cali"
+firewall-cmd --permanent --zone=trusted --add-interface="wireguard.cali"
 firewall-cmd --reload
 
 

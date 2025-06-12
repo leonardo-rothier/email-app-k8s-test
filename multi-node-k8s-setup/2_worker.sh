@@ -18,9 +18,14 @@ systemctl enable --now firewalld
 firewall-cmd --permanent --add-port=10250/tcp       # kubelet API
 firewall-cmd --permanent --add-port=30000-32767/tcp # NodePort Services
 firewall-cmd --permanent --add-port=179/tcp         # enable BGP mesh between nodes
-sudo firewall-cmd --permanent --add-protocol=4
-sudo firewall-cmd --permanent --add-rich-rule="rule family=ipv4 source address=10.244.0.0/16 accept"
-sudo firewall-cmd --permanent --add-rich-rule="rule family=ipv4 source address=10.96.0.0/12 accept"
+# Solve calico conflicts problem
+firewall-cmd --permanent --zone=trusted --add-interface="cali+"
+firewall-cmd --permanent --zone=trusted --add-interface="tunl+"
+firewall-cmd --permanent --zone=trusted --add-interface="vxlan-v6.calico"
+firewall-cmd --permanent --zone=trusted --add-interface="vxlan.calico"
+firewall-cmd --permanent --zone=trusted --add-interface="wg-v6.cali"
+firewall-cmd --permanent --zone=trusted --add-interface="wireguard.cali"
+
 firewall-cmd --reload
 
 # Load kernel modules

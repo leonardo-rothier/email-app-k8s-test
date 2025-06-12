@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: email-site
-          image: leonardorothier/email-site:v1
+          image: leonardorothier/email-site:v2
           ports:
             - containerPort: 80
               name: http
