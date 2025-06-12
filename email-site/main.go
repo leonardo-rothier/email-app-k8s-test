@@ -407,10 +407,12 @@ const htmlTemplate = `
 </html>
 `
 
+// Config just to test pods
 func createHTTPClient() *http.Client {
 	transport := &http.Transport{
 		DisableKeepAlives: true,
 		MaxIdleConns:      0,
+        MaxIdleConnsPerHost: 0,
 		IdleConnTimeout:   1 * time.Second,
 	}
 
@@ -460,7 +462,9 @@ func main() {
 
 	// Proxy endpoint for getting IP info
 	r.GET("/api/get-ip", func(c *gin.Context) {
-		resp, err := http.Get("http://email-service/get-ip")
+        client := createHTTPClient()
+
+		resp, err := client.Get("http://email-service/get-ip")
 		if err != nil {
 			c.JSON(500, gin.H{"error": "Failed to connect to email service: " + err.Error()})
 			return
