@@ -73,6 +73,7 @@ firewall-cmd --permanent --add-port=2379-2380/tcp # etcd server client API
 firewall-cmd --permanent --add-port=10250/tcp     # kubelet API
 firewall-cmd --permanent --add-port=10251/tcp     # kube-scheduler
 firewall-cmd --permanent --add-port=10252/tcp     # kube-controller-manager
+firewall-cmd --permanent --add-port=179/tcp         # enable BGP mesh between nodes
 firewall-cmd --reload
 
 

@@ -17,6 +17,10 @@ EOF
 systemctl enable --now firewalld
 firewall-cmd --permanent --add-port=10250/tcp       # kubelet API
 firewall-cmd --permanent --add-port=30000-32767/tcp # NodePort Services
+firewall-cmd --permanent --add-port=179/tcp         # enable BGP mesh between nodes
+sudo firewall-cmd --permanent --add-protocol=4
+sudo firewall-cmd --permanent --add-rich-rule="rule family=ipv4 source address=10.244.0.0/16 accept"
+sudo firewall-cmd --permanent --add-rich-rule="rule family=ipv4 source address=10.96.0.0/12 accept"
 firewall-cmd --reload
 
 # Load kernel modules
@@ -73,4 +77,6 @@ dnf install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
 systemctl enable --now kubelet
 
 echo "Worker node setup completed! Ready for 'kubeadm join'"
+# if you losted the join token your can create a new one running:
+# kubeadm token create --print-join-command (on the master node)
 

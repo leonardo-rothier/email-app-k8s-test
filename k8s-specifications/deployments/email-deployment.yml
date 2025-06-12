@@ -12,7 +12,6 @@ spec:
   replicas: 3
   template:
     metadata:
-      name: email
       labels: 
         app: email
         type: back-end
@@ -21,7 +20,7 @@ spec:
         - name: email-service
           image: leonardorothier/email-service:v1
           ports:
-            containerPort: 8080
+            - containerPort: 8080
           env:
             - name: GMAIL_USERNAME
               valueFrom:

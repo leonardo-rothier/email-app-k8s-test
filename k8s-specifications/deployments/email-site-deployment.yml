@@ -10,7 +10,6 @@ spec:
       type: front-end
   template:
     metadata:
-      name: email
       labels:
         app: email
         type: front-end
