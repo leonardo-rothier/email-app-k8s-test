@@ -479,5 +479,9 @@ func main() {
 		c.JSON(resp.StatusCode, result)
 	})
 
+    r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "healthy"})
+	})
+
 	r.Run("0.0.0.0:80")
 }
