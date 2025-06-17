@@ -66,7 +66,38 @@ For monitoring we are going to use prometheus, for this, with helm installed, ru
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
 
-helm install prometheus prometheus-community/kube-prometheus-stack
+helm install prometheus prometheus-community/kube-prometheus-stack --namespace monitoring --create-namespace
+```
+
+#### Expose Prometheus/Grafana
+To expose the pod instances of prometheus and grafana change its services to NodePort editing:
+```bash
+kubectl edit svc/prometheus-kube-prometheus-prometheus
+kubectl edit svc/prometheus-grafana
+```
+#### Necessary configuration to scrap metrics
+KubeProxy to be acessible ouside its localhost, if you are using multiples nodes:
+```bash
+# edit the metricsBindAddress as needed for your case
+kubectl edit configmap -n kube-system kube-proxy
+```
+The same with the etcd config file at /etc/kubernetes/manifests/etcd.yaml:
+
+```bash
+# Change the value inside the --listen-metrics-urls as needed
+sudo vim /etc/kubernetes/manifests/etcd.yaml
+```
+
+And edit the kube-scheduler manifest:
+```bash
+# Change the value inside the --bind-address as needed
+sudo vim /etc/kubernetes/manifests/kube-scheduler.yaml
+```
+
+#### Grafana get credentials
+```bash
+kubectl get secret prometheus-grafana -n default -o jsonpath="{.data.admin-user}" | base64e --decode; echo
+kubectl get secret prometheus-grafana -n default -o jsonpath="{.data.admin-password}" | base64 --decode; echo
 ```
 
 ### EXTRA: EKS cluster

@@ -21,6 +21,10 @@ import (
 	"gopkg.in/gomail.v2"
 
 	"github.com/gin-gonic/gin"
+
+	"email-service/metrics"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type EmailRequest struct {
@@ -39,6 +43,24 @@ type Config struct {
 }
 
 var appConfig Config
+
+func prometheusMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		path := c.FullPath()
+		if path == "" {
+			path = c.Request.URL.Path
+		}
+
+		c.Next()
+
+		duration := time.Since(start).Seconds()
+		status := strconv.Itoa(c.Writer.Status())
+
+		metrics.HTTPRequests.WithLabelValues(c.Request.Method, path, status).Inc()
+		metrics.HTTPRequestDuration.WithLabelValues(c.Request.Method, path).Observe(duration)
+	}
+}
 
 func init() {
 	appConfig = Config{
@@ -205,15 +227,18 @@ func emailHandler(c *gin.Context) {
 	var request EmailRequest
 
 	if err := c.ShouldBindJSON(&request); err != nil {
+		metrics.EmailErrors.WithLabelValues("plain").Inc()
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	if err := sendEmail(request.To, request.Subject, request.Body, request.Filename, request.Attachment); err != nil {
+		metrics.EmailErrors.WithLabelValues("plain").Inc()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	metrics.EmailsSent.WithLabelValues("plain").Inc()
 	c.JSON(http.StatusOK, gin.H{"message": "Email enviado com sucesso"})
 }
 
@@ -221,15 +246,18 @@ func emailHtmlHandler(c *gin.Context) {
 	var request EmailRequest
 
 	if err := c.ShouldBindJSON(&request); err != nil {
+		metrics.EmailErrors.WithLabelValues("html").Inc()
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	if err := sendEmailHtmlFormat(request.To, request.Subject, request.Body, request.Filename, request.Attachment); err != nil {
+		metrics.EmailErrors.WithLabelValues("html").Inc()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	metrics.EmailsSent.WithLabelValues("html").Inc()
 	c.JSON(http.StatusOK, gin.H{"message": "Email enviado com sucesso"})
 }
 
@@ -261,6 +289,10 @@ func getIpHandler(c *gin.Context) {
 func main() {
 	router := gin.Default()
 
+	router.Use(prometheusMiddleware())
+
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
 	trustedProxies := []string{
 		"192.168.1.0/24",
 	}
@@ -270,10 +302,10 @@ func main() {
 		log.Fatalf("error on creating trusted proxies: %v", err)
 	}
 
-	router.GET("/get-ip", getIpHandler)
-
 	router.POST("/send-email", emailHandler)
 	router.POST("/send-email-html", emailHtmlHandler)
+
+	router.GET("/get-ip", getIpHandler)
 
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "healthy"})
