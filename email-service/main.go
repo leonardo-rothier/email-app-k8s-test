@@ -1,30 +1,23 @@
 package main
 
 import (
-	"bytes"
-	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
-	"mime/multipart"
 	"net"
 	"net/http"
-	"net/smtp"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
-	"time"
 
 	"gopkg.in/gomail.v2"
 
 	"github.com/gin-gonic/gin"
+	ginprometheus "github.com/zsais/go-gin-prometheus"
 
 	"email-service/metrics"
-
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type EmailRequest struct {
@@ -35,57 +28,47 @@ type EmailRequest struct {
 	Attachment string `json:"attachment,omitempty"`
 }
 
-type Config struct {
+type SenderConfig struct {
 	GmailUser     string
 	GmailPassword string
-	SmtpHost      string
-	SmtpPort      string
 }
 
-var appConfig Config
-
-func prometheusMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		start := time.Now()
-		path := c.FullPath()
-		if path == "" {
-			path = c.Request.URL.Path
-		}
-
-		c.Next()
-
-		duration := time.Since(start).Seconds()
-		status := strconv.Itoa(c.Writer.Status())
-
-		metrics.HTTPRequests.WithLabelValues(c.Request.Method, path, status).Inc()
-		metrics.HTTPRequestDuration.WithLabelValues(c.Request.Method, path).Observe(duration)
-	}
-}
+var (
+	senderConfigs map[string]SenderConfig
+	smtpHost      = "smtp.gmail.com"
+	stmpPort      = "587"
+)
 
 func init() {
-	appConfig = Config{
-		GmailUser:     os.Getenv("GMAIL_USERNAME"),
-		GmailPassword: os.Getenv("GMAIL_APP_PASSWORD"),
-		SmtpHost:      "smtp.gmail.com",
-		SmtpPort:      "587",
-	}
+	senderConfigs = make(map[string]SenderConfig)
+	senders := []string{"compras", "financeiro", "controle"}
 
-	if appConfig.GmailUser == "" || appConfig.GmailPassword == "" {
-		log.Fatal("GMAIL_USERNAME and GMAIL_APP_PASSWORD environment variables must be set")
+	log.Println("Loading sender configurations...")
+
+	for _, senderName := range senders {
+		userEnvKey := fmt.Sprintf("SENDER_%s_USER", strings.ToUpper(senderName))
+		passEnvKey := fmt.Sprintf("SENDER_%s_PASS", strings.ToUpper(senderName))
+
+		user := os.Getenv(userEnvKey)
+		pass := os.Getenv(passEnvKey)
+
+		if user == "" || pass == "" {
+			log.Fatalf("Environment variables %s and %s must be set for sender '%s'", userEnvKey, passEnvKey, senderName)
+		}
+
+		senderConfigs[senderName] = SenderConfig{
+			GmailUser:     user,
+			GmailPassword: pass,
+		}
+		log.Printf("Loaded configuration for sender: %s", senderName)
 	}
 }
 
-func generateMessageID() string {
-	return fmt.Sprintf("%d.%d", time.Now().UnixNano(), rand.Int63())
-}
-
-func sendEmailHtmlFormat(to, subject, body, filename, attachment string) error {
+func sendEmailHtmlFormat(config SenderConfig, to, subject, body, filename, attachment string) error {
 	m := gomail.NewMessage()
 
-	sender := appConfig.GmailUser
-
-	m.SetHeader("From", sender)
-	m.SetHeader("To", sender, to)
+	m.SetHeader("From", config.GmailUser)
+	m.SetHeader("To", to)
 	//m.SetAddressHeader("Cc", "") #caso tenha algum
 	m.SetHeader("Subject", subject)
 	m.SetBody("text/html", body)
@@ -103,8 +86,8 @@ func sendEmailHtmlFormat(to, subject, body, filename, attachment string) error {
 	}
 
 	// send email
-	port, _ := strconv.Atoi(appConfig.SmtpPort)
-	d := gomail.NewDialer(appConfig.SmtpHost, port, appConfig.GmailUser, appConfig.GmailPassword)
+	port, _ := strconv.Atoi(stmpPort)
+	d := gomail.NewDialer(smtpHost, port, config.GmailUser, config.GmailPassword)
 
 	if err := d.DialAndSend(m); err != nil {
 		return fmt.Errorf("failed to send email: %w", err)
@@ -113,152 +96,33 @@ func sendEmailHtmlFormat(to, subject, body, filename, attachment string) error {
 	return nil
 }
 
-func sendEmail(to, subject, body, filename, attachment string) error {
-	auth := smtp.PlainAuth("", appConfig.GmailUser, appConfig.GmailPassword, appConfig.SmtpHost)
+// Factory patterns for handler
+func createEmailHandler(senderName string) gin.HandlerFunc {
+	config, ok := senderConfigs[senderName]
 
-	var emailBuf bytes.Buffer
-	writer := multipart.NewWriter(&emailBuf)
-
-	// Cabeçalhos do email
-	headers := map[string]string{
-		"From":         appConfig.GmailUser,
-		"To":           to,
-		"Subject":      subject,
-		"MIME-Version": "1.0",
-		"Content-Type": fmt.Sprintf("multipart/mixed; boundary=%s", writer.Boundary()),
-		"Return-Path":  appConfig.GmailUser,
-		"Message-ID":   fmt.Sprintf("<%s@%s>", generateMessageID(), appConfig.SmtpHost),
-		"X-Mailer":     "TTZ Sistema de Compras",
-		"X-Priority":   "1 (Highest)",
+	if !ok {
+		log.Fatalf("No Configuration found for sender '%s'", senderName)
 	}
 
-	for k, v := range headers {
-		emailBuf.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
-	}
-	emailBuf.WriteString("\r\n")
+	return func(c *gin.Context) {
+		var request EmailRequest
 
-	// Parte de texto
-	part, err := writer.CreatePart(map[string][]string{
-		"Content-Type": {"text/plain; charset=utf-8"},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create text part: %v", err)
-	}
-	part.Write([]byte(strings.ReplaceAll(body, "\\n", "\r\n"))) // Convertendo \n para quebras de linha reais
+		if err := c.ShouldBindJSON(&request); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 
-	// Anexo (se existir)
-	if attachment != "" && filename != "" {
-		decoded, err := base64.StdEncoding.DecodeString(attachment)
+		err := sendEmailHtmlFormat(config, request.To, request.Subject, request.Body, request.Filename, request.Attachment)
+
 		if err != nil {
-			return fmt.Errorf("failed to decode base64 attachment: %v", err)
+			metrics.EmailErrors.WithLabelValues(senderName).Inc()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
 		}
 
-		contentType := "application/pdf" // Assumindo PDF como padrão
-		if !strings.HasSuffix(filename, ".pdf") {
-			contentType = "application/octet-stream"
-		}
-
-		part, err = writer.CreatePart(map[string][]string{
-			"Content-Type":              {contentType},
-			"Content-Disposition":       {fmt.Sprintf(`attachment; filename="%s"`, filename)},
-			"Content-Transfer-Encoding": {"base64"},
-		})
-		if err != nil {
-			return fmt.Errorf("failed to create attachment part: %v", err)
-		}
-
-		encoder := base64.NewEncoder(base64.StdEncoding, part)
-		if _, err := encoder.Write(decoded); err != nil {
-			return fmt.Errorf("failed to write attachment: %v", err)
-		}
-		encoder.Close()
+		metrics.EmailsSent.WithLabelValues(senderName).Inc()
+		c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Email From '%s' sent successfully", senderName)})
 	}
-
-	writer.Close()
-
-	// Conexão SMTP
-	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%s", appConfig.SmtpHost, appConfig.SmtpPort))
-	if err != nil {
-		return fmt.Errorf("connection failed: %v", err)
-	}
-	defer conn.Close()
-
-	client, err := smtp.NewClient(conn, appConfig.SmtpHost)
-	if err != nil {
-		return fmt.Errorf("SMTP client creation failed: %v", err)
-	}
-	defer client.Close()
-
-	// TLS
-	tlsConfig := &tls.Config{
-		ServerName: appConfig.SmtpHost,
-	}
-	if err = client.StartTLS(tlsConfig); err != nil {
-		return fmt.Errorf("TLS handshake failed: %v", err)
-	}
-
-	// Autenticação
-	if err = client.Auth(auth); err != nil {
-		return fmt.Errorf("authentication failed: %v", err)
-	}
-
-	// Envio
-	if err = client.Mail(appConfig.GmailUser); err != nil {
-		return fmt.Errorf("sender setup failed: %v", err)
-	}
-	if err = client.Rcpt(to); err != nil {
-		return fmt.Errorf("recipient setup failed: %v", err)
-	}
-
-	w, err := client.Data()
-	if err != nil {
-		return fmt.Errorf("data writer failed: %v", err)
-	}
-	defer w.Close()
-
-	if _, err = emailBuf.WriteTo(w); err != nil {
-		return fmt.Errorf("failed to send email: %v", err)
-	}
-
-	return nil
-}
-
-func emailHandler(c *gin.Context) {
-	var request EmailRequest
-
-	if err := c.ShouldBindJSON(&request); err != nil {
-		metrics.EmailErrors.WithLabelValues("plain").Inc()
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	if err := sendEmail(request.To, request.Subject, request.Body, request.Filename, request.Attachment); err != nil {
-		metrics.EmailErrors.WithLabelValues("plain").Inc()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	metrics.EmailsSent.WithLabelValues("plain").Inc()
-	c.JSON(http.StatusOK, gin.H{"message": "Email enviado com sucesso"})
-}
-
-func emailHtmlHandler(c *gin.Context) {
-	var request EmailRequest
-
-	if err := c.ShouldBindJSON(&request); err != nil {
-		metrics.EmailErrors.WithLabelValues("html").Inc()
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	if err := sendEmailHtmlFormat(request.To, request.Subject, request.Body, request.Filename, request.Attachment); err != nil {
-		metrics.EmailErrors.WithLabelValues("html").Inc()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	metrics.EmailsSent.WithLabelValues("html").Inc()
-	c.JSON(http.StatusOK, gin.H{"message": "Email enviado com sucesso"})
 }
 
 func getIpHandler(c *gin.Context) {
@@ -289,9 +153,8 @@ func getIpHandler(c *gin.Context) {
 func main() {
 	router := gin.Default()
 
-	router.Use(prometheusMiddleware())
-
-	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	p := ginprometheus.NewPrometheus("email_service")
+	p.Use(router)
 
 	trustedProxies := []string{
 		"192.168.1.0/24",
@@ -302,8 +165,9 @@ func main() {
 		log.Fatalf("error on creating trusted proxies: %v", err)
 	}
 
-	router.POST("/send-email", emailHandler)
-	router.POST("/send-email-html", emailHtmlHandler)
+	router.POST("/send-email-compras", createEmailHandler("compras"))
+	router.POST("/send-email-financeiro", createEmailHandler("financeiro"))
+	router.POST("/send-email-controle", createEmailHandler("controle"))
 
 	router.GET("/get-ip", getIpHandler)
 
