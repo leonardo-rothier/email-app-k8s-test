@@ -94,15 +94,19 @@ And edit the kube-scheduler manifest:
 sudo vim /etc/kubernetes/manifests/kube-scheduler.yaml
 ```
 
+#### Additional scrape configs (for your applications)
+Create a ServiceMonitor and apply it, Service Monitors define a set of targets for prometheus to monitor and scrape:
+```bash
+kubectl apply -f k8s-specifications/monitoring/
+```
+The release label is necessary and you get this information under:
+```bash
+# This label allows prometheus to find service monitors in the cluster
+kubectl get prometheuses.monitoring.coreos.com -o yaml -n monitoring | grep -A3 serviceMonitorSelector:
+```
+
 #### Grafana get credentials
 ```bash
 kubectl get secret prometheus-grafana -n default -o jsonpath="{.data.admin-user}" | base64e --decode; echo
 kubectl get secret prometheus-grafana -n default -o jsonpath="{.data.admin-password}" | base64 --decode; echo
-```
-
-### EXTRA: EKS cluster
-If you pretend to run in a Hosted (Managed) solution as EKS, it will still works but with a slight change on the email-site-service, change the type to `LoadBalancer` and remove the `nodePort`.  
-Even better, use an ingress, is more cost-effective for multiple services. For this, your email-site-service will become a ClusterIP(default type) as we made with the backend, and you will need to apply:
-```bash
-kubectl apply -f k8s-specifications/ingress/email-ingress.yml
-```
+```/

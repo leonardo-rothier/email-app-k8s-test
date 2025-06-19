@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: email-service
-          image: leonardorothier/email-service:v1
+          image: leonardorothier/email-service:v2
           ports:
             - containerPort: 8080
           env:

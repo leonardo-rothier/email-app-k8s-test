@@ -1,0 +1,27 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  namespace: monitoring
+  name: email-service-alert-webhook
+  labels:
+    release: prometheus
+spec:
+  route:
+    receiver: 'null'
+    routes:
+      - matchers:
+          - name: service
+            value: email-service
+            matchType: =
+          - name: severity
+            value: critical
+            matchType: =
+        receiver: 'webhook-tester'
+    
+  receivers:
+    - name: 'webhook-tester'
+      webhookConfigs:
+        - url: 'https://webhook.site/e4d8ae8f-afb4-437c-b9c6-774dbb68f730'
+          sendResolved: true
+    - name: 'null'
+# get webhook url for test here: https://webhook.site/

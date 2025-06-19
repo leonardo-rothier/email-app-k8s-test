@@ -1,0 +1,41 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  namespace: monitoring
+  name: email-service-rules
+  labels:
+    release: prometheus
+spec:
+  groups:
+    - name: email-service.rules
+      rules:
+        - alert: EmailServiceInstanceDown
+          expr: | 
+            (up{job="email-service"} == 0)
+            or
+            (absent(up{job="email-service"}))
+          labels:
+            severity: critical
+            service: email-service
+            namespace: monitoring
+            # This is to capture the instance lable from the metric.
+            instance: '{{ $labels.instance }}'
+          annotations:
+            summary: "Email Service instance is down ({{ $labels.instance }})"
+            description: "The Prometheus target {{ $labels.instance }} for job `email-service` has been down for more than 1 minute."
+        
+        - alert: EmailServiceHeighErrorRate
+          expr: |
+            (
+              sum by(job) (rate(app_email_errors_total{job="email-service"}[5m]))
+            /
+              (sum by(job) (rate(app_emails_sent_total{job="email-service"}[5m])) + sum by(job) (rate(app_email_errors_total{job="email-service"}[5m])))
+            ) * 100 > 5
+          for: 5m
+          labels:
+            severity: warning
+            service: email-service
+            namespace: monitoring
+          annotations:
+            summary: "High email sending error rate for Email Service"
+            description: "The Email Service is experiencing an error rate of {{ $value | humanizePercentage }}."

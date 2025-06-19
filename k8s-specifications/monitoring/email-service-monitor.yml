@@ -1,0 +1,23 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: email-service-monitor
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  jobLabel: instance
+  # this matches the labels on the Service that we want to scrape
+  selector:
+    matchLabels:
+      instance: email-service
+      type: back-end
+  # this tells the servicemonitor to look for service in the the default namespace
+  namespaceSelector:
+    matchNames:
+      - default
+  endpoints:
+    - port: web
+      path: /metrics
+      interval: 15s
+  
