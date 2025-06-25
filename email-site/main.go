@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"io"
 	"net/http"
@@ -23,7 +24,6 @@ type ProxyEmailRequest struct {
 	Subject string `json:"subject" binding:"required"`
 	Body    string `json:"body" binding:"required"`
 }
-
 
 const htmlTemplate = `
 <!DOCTYPE html>
@@ -431,10 +431,10 @@ const htmlTemplate = `
 // Config just to test pods
 func createHTTPClient() *http.Client {
 	transport := &http.Transport{
-		DisableKeepAlives: true,
-		MaxIdleConns:      0,
-        MaxIdleConnsPerHost: 0,
-		IdleConnTimeout:   1 * time.Second,
+		DisableKeepAlives:   true,
+		MaxIdleConns:        0,
+		MaxIdleConnsPerHost: 0,
+		IdleConnTimeout:     1 * time.Second,
 	}
 
 	return &http.Client{
@@ -453,14 +453,13 @@ func main() {
 		tmpl.Execute(c.Writer, nil)
 	})
 
-	
 	r.POST("/api/send-email", func(c *gin.Context) {
 		var proxyReq ProxyEmailRequest
 		if err := c.ShouldBindJSON(&proxyReq); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
 			return
 		}
-        
+
 		allowedSenders := map[string]bool{
 			"compras":    true,
 			"financeiro": true,
@@ -501,7 +500,7 @@ func main() {
 
 	// Proxy endpoint for getting IP info
 	r.GET("/api/get-ip", func(c *gin.Context) {
-        client := createHTTPClient()
+		client := createHTTPClient()
 
 		resp, err := client.Get("http://email-service/get-ip")
 		if err != nil {
@@ -518,7 +517,7 @@ func main() {
 		c.JSON(resp.StatusCode, result)
 	})
 
-    r.GET("/health", func(c *gin.Context) {
+	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "healthy"})
 	})
 

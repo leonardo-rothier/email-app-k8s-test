@@ -115,12 +115,12 @@ func createEmailHandler(senderName string) gin.HandlerFunc {
 		err := sendEmailHtmlFormat(config, request.To, request.Subject, request.Body, request.Filename, request.Attachment)
 
 		if err != nil {
-			metrics.EmailErrors.WithLabelValues(senderName).Inc()
+			metrics.EmailsProcessed.WithLabelValues(senderName, strconv.Itoa(http.StatusInternalServerError)).Inc()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
-		metrics.EmailsSent.WithLabelValues(senderName).Inc()
+		metrics.EmailsProcessed.WithLabelValues(senderName, strconv.Itoa(http.StatusOK)).Inc()
 		c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Email From '%s' sent successfully", senderName)})
 	}
 }
