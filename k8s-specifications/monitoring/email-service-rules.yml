@@ -18,7 +18,7 @@ spec:
             severity: critical
             service: email-service
             namespace: monitoring
-            # This is to capture the instance lable from the metric.
+            # This is to capture the instance labels from the metric.
             instance: '{{ $labels.instance }}'
           annotations:
             summary: "Email Service instance is down ({{ $labels.instance }})"

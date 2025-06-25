@@ -13,9 +13,7 @@ spec:
           - name: service
             value: email-service
             matchType: =
-          - name: severity
-            value: critical
-            matchType: =
+        groupBy: ["severity"]
         receiver: 'webhook-tester'
     
   receivers:
