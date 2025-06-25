@@ -445,7 +445,7 @@ func main() {
 
 		// Forward the request to email-service
 		jsonData, _ := json.Marshal(emailReq)
-		resp, err := client.Post("http://email-service/send-email-html", "application/json", bytes.NewBuffer(jsonData))
+		resp, err := client.Post("http://email-service/send-email-compras", "application/json", bytes.NewBuffer(jsonData))
 		if err != nil {
 			c.JSON(500, gin.H{"error": "Failed to connect to email service: " + err.Error()})
 			return

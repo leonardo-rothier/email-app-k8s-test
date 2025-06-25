@@ -34,9 +34,9 @@ Gmail API
 
 ## Setup Instructions
 ### Create Kubernetes Secret
-Create the Gmail credentials secret that the backend will use:
+Create the Gmail credentials secret that email-service backend will use (depends on yours senders):
 ```bash
-kubectl create secret generic gmail-credentials \
+kubectl create secret generic gmail-sender-credentials \
 --from-literal=username=your-email@gmail.com \
 --from-literal=password=your-app-password
 ```
