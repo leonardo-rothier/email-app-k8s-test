@@ -11,11 +11,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type EmailRequest struct {
+type BackendEmailRequest struct {
+	To      string `json:"to"`
+	Subject string `json:"subject"`
+	Body    string `json:"body"`
+}
+
+type ProxyEmailRequest struct {
+	Sender  string `json:"sender" binding:"required"`
 	To      string `json:"to" binding:"required"`
 	Subject string `json:"subject" binding:"required"`
 	Body    string `json:"body" binding:"required"`
 }
+
 
 const htmlTemplate = `
 <!DOCTYPE html>
@@ -123,7 +131,7 @@ const htmlTemplate = `
             letter-spacing: 0.5px;
         }
 
-        input, textarea {
+        input, textarea, select {
             width: 100%;
             padding: 15px;
             border: 2px solid #e0e0e0;
@@ -131,9 +139,10 @@ const htmlTemplate = `
             font-size: 16px;
             transition: all 0.3s ease;
             font-family: inherit;
+            background-color: #fff;
         }
 
-        input:focus, textarea:focus {
+        input:focus, textarea:focus, select:focus {
             outline: none;
             border-color: #667eea;
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
@@ -160,13 +169,18 @@ const htmlTemplate = `
             position: relative;
             overflow: hidden;
         }
+        
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
 
-        button:hover {
+        button:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
         }
 
-        button:active {
+        button:active:not(:disabled) {
             transform: translateY(0);
         }
 
@@ -262,40 +276,43 @@ const htmlTemplate = `
         <h1>📧 Email Service Tester</h1>
         
         <div class="tabs">
-            <button class="tab active" onclick="showTab('email')">Enviar Email</button>
-            <button class="tab" onclick="showTab('ip')">Informações de IP</button>
+            <button class="tab active" onclick="showTab('email', event)">Enviar Email</button>
+            <button class="tab" onclick="showTab('ip', event)">Informações de IP</button>
         </div>
 
         <div id="email" class="content active">
             <form id="emailForm">
                 <div class="form-group">
+                    <label for="sender">Remetente:</label>
+                    <select id="sender" name="sender" required>
+                        <option value="compras">Compras</option>
+                        <option value="financeiro">Financeiro</option>
+                        <option value="controle">Controle</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label for="to">Para (Email):</label>
                     <input type="email" id="to" name="to" required placeholder="destinatario@example.com">
                 </div>
-
                 <div class="form-group">
                     <label for="subject">Assunto:</label>
                     <input type="text" id="subject" name="subject" required placeholder="Assunto do email">
                 </div>
-
                 <div class="form-group">
                     <label for="body">Mensagem:</label>
                     <textarea id="body" name="body" required placeholder="Digite sua mensagem aqui..."></textarea>
                 </div>
-
                 <button type="submit">
                     <span id="sendButtonText">Enviar Email</span>
                 </button>
             </form>
-
             <div id="emailMessage"></div>
         </div>
 
         <div id="ip" class="content">
-            <button onclick="getIPInfo()">
+            <button onclick="getIPInfo(event)">
                 <span id="ipButtonText">Obter Informações do Email Service</span>
             </button>
-
             <div class="ip-info" id="ipInfo" style="display: none;">
                 <div class="ip-item">
                     <div class="ip-label">Pod Name</div>
@@ -314,13 +331,12 @@ const htmlTemplate = `
                     <div class="ip-value" id="clientIP">-</div>
                 </div>
             </div>
-
             <div id="ipMessage"></div>
         </div>
     </div>
 
     <script>
-        function showTab(tabName) {
+        function showTab(tabName, event) {
             const tabs = document.querySelectorAll('.tab');
             const contents = document.querySelectorAll('.content');
             
@@ -334,11 +350,12 @@ const htmlTemplate = `
         document.getElementById('emailForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const button = document.querySelector('#emailForm button');
+            const button = e.target.querySelector('button');
             const buttonText = document.getElementById('sendButtonText');
             const messageDiv = document.getElementById('emailMessage');
             
             const emailData = {
+                sender: document.getElementById('sender').value,
                 to: document.getElementById('to').value,
                 subject: document.getElementById('subject').value,
                 body: document.getElementById('body').value
@@ -346,6 +363,7 @@ const htmlTemplate = `
 
             buttonText.innerHTML = 'Enviando<span class="loading"></span>';
             button.disabled = true;
+            messageDiv.innerHTML = '';
 
             try {
                 const response = await fetch('/api/send-email', {
@@ -359,8 +377,10 @@ const htmlTemplate = `
                 const data = await response.json();
 
                 if (response.ok) {
-                    messageDiv.innerHTML = '<div class="message success"><span class="icon">✓</span>Email enviado com sucesso!</div>';
-                    document.getElementById('emailForm').reset();
+                    messageDiv.innerHTML = '<div class="message success"><span class="icon">✓</span>' + (data.message || 'Email enviado com sucesso!') + '</div>';
+                    document.getElementById('to').value = '';
+                    document.getElementById('subject').value = '';
+                    document.getElementById('body').value = '';
                 } else {
                     messageDiv.innerHTML = '<div class="message error"><span class="icon">✗</span>Erro ao enviar email: ' + (data.error || 'Erro desconhecido') + '</div>';
                 }
@@ -372,7 +392,7 @@ const htmlTemplate = `
             }
         });
 
-        async function getIPInfo() {
+        async function getIPInfo(event) {
             const button = event.target.closest('button');
             const buttonText = document.getElementById('ipButtonText');
             const ipInfo = document.getElementById('ipInfo');
@@ -380,6 +400,8 @@ const htmlTemplate = `
             
             buttonText.innerHTML = 'Obtendo informações<span class="loading"></span>';
             button.disabled = true;
+            messageDiv.innerHTML = '';
+            ipInfo.style.display = 'none';
 
             try {
                 const response = await fetch('/api/get-ip');
@@ -391,9 +413,8 @@ const htmlTemplate = `
                     document.getElementById('outboundIP').textContent = data.outbound_ip || 'N/A';
                     document.getElementById('clientIP').textContent = data.client_ip || 'N/A';
                     ipInfo.style.display = 'block';
-                    messageDiv.innerHTML = '';
                 } else {
-                    messageDiv.innerHTML = '<div class="message error"><span class="icon">✗</span>Erro ao obter informações de IP</div>';
+                    messageDiv.innerHTML = '<div class="message error"><span class="icon">✗</span>' + (data.error || 'Erro ao obter informações de IP') + '</div>';
                 }
             } catch (error) {
                 messageDiv.innerHTML = '<div class="message error"><span class="icon">✗</span>Erro de conexão: ' + error.message + '</div>';
@@ -432,27 +453,45 @@ func main() {
 		tmpl.Execute(c.Writer, nil)
 	})
 
-	// Proxy endpoint for sending emails
+	
 	r.POST("/api/send-email", func(c *gin.Context) {
-		var emailReq EmailRequest
-		if err := c.ShouldBindJSON(&emailReq); err != nil {
-			c.JSON(400, gin.H{"error": err.Error()})
+		var proxyReq ProxyEmailRequest
+		if err := c.ShouldBindJSON(&proxyReq); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
+			return
+		}
+        
+		allowedSenders := map[string]bool{
+			"compras":    true,
+			"financeiro": true,
+			"controle":   true,
+		}
+		if !allowedSenders[proxyReq.Sender] {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid sender specified."})
 			return
 		}
 
-		// Create a new HTTP client for each request
+		backendURL := fmt.Sprintf("http://email-service/send-email-%s", proxyReq.Sender)
+
+		backendReq := BackendEmailRequest{
+			To:      proxyReq.To,
+			Subject: proxyReq.Subject,
+			Body:    proxyReq.Body,
+		}
+		jsonData, _ := json.Marshal(backendReq)
+
+		// Create a new HTTP client for each request (just for test purpose)
 		client := createHTTPClient()
 
-		// Forward the request to email-service
-		jsonData, _ := json.Marshal(emailReq)
-		resp, err := client.Post("http://email-service/send-email-compras", "application/json", bytes.NewBuffer(jsonData))
+		// Forward the request to the dynamically determined backend endpoint.
+		resp, err := client.Post(backendURL, "application/json", bytes.NewBuffer(jsonData))
 		if err != nil {
-			c.JSON(500, gin.H{"error": "Failed to connect to email service: " + err.Error()})
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Failed to connect to email service: " + err.Error()})
 			return
 		}
 		defer resp.Body.Close()
 
-		// Read the response
+		// Read the response from the backend and forward it back to the browser.
 		body, _ := io.ReadAll(resp.Body)
 		var result map[string]interface{}
 		json.Unmarshal(body, &result)
