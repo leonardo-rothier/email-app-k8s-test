@@ -1,6 +1,6 @@
 # Email App K8s Test Environment 📧
-![CentOS Version](https://img.shields.io/badge/CentOS-9-blue)
-![Kubernetes Version](https://img.shields.io/badge/Kubernetes-1.33-blue)
+![CentOS Version](https://img.shields.io/badge/CentOS-9-212078)  
+![Kubernetes Version](https://img.shields.io/badge/Kubernetes-1.33-blue)  
 A simple Kubernetes project demonstrating communication between frontend and backend pods. This is an educational environment designed to help understand core Kubernetes concepts like Deployments, Services, Secrets, and pod-to-pod communication.
 
 ## Project Overview
