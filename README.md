@@ -1,4 +1,6 @@
 # Email App K8s Test Environment 📧
+![CentOS Version](https://img.shields.io/badge/CentOS-9-blue)
+![Kubernetes Version](https://img.shields.io/badge/Kubernetes-1.33-blue)
 A simple Kubernetes project demonstrating communication between frontend and backend pods. This is an educational environment designed to help understand core Kubernetes concepts like Deployments, Services, Secrets, and pod-to-pod communication.
 
 ## Project Overview
@@ -109,4 +111,10 @@ kubectl get prometheuses.monitoring.coreos.com -o yaml -n monitoring | grep -A3 
 ```bash
 kubectl get secret prometheus-grafana -n default -o jsonpath="{.data.admin-user}" | base64e --decode; echo
 kubectl get secret prometheus-grafana -n default -o jsonpath="{.data.admin-password}" | base64 --decode; echo
-```/
+```
+
+#### Monitoring examples
+##### Email Service
+![Demo Screenshot](assets/EmailServiceMonitoring.png)
+##### Kubernetes Workloads
+![Demo Screenshot](assets/KubernetesWorkloadsMonitoring.png)
