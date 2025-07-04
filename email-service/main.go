@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -29,47 +30,77 @@ type EmailRequest struct {
 }
 
 type SenderConfig struct {
-	GmailUser     string
-	GmailPassword string
+	FromEmail              string
+	ServiceAccountEmail    string
+	ServiceAccountPassword string
+	Provider               string
+}
+
+type SMTPConfig struct {
+	Host string
+	Port string
 }
 
 var (
 	senderConfigs map[string]SenderConfig
-	smtpHost      = "smtp.gmail.com"
-	stmpPort      = "587"
+	smtpConfigs   = map[string]SMTPConfig{
+		"gmail": {
+			Host: "smtp.gmail.com",
+			Port: "587",
+		},
+		"office365": {
+			Host: "smtp.office365.com",
+			Port: "587",
+		},
+	}
 )
 
 func init() {
 	senderConfigs = make(map[string]SenderConfig)
-	senders := []string{"compras", "financeiro", "controle"}
 
-	log.Println("Loading sender configurations...")
+	serviceEmail := os.Getenv("SERVICE_ACCOUNT_EMAIL")
+	servicePassword := os.Getenv("SERVICE_ACCOUNT_PASS")
+	provider := os.Getenv("SENDER_PROVIDER")
 
-	for _, senderName := range senders {
-		userEnvKey := fmt.Sprintf("SENDER_%s_USER", strings.ToUpper(senderName))
-		passEnvKey := fmt.Sprintf("SENDER_%s_PASS", strings.ToUpper(senderName))
+	if serviceEmail == "" || servicePassword == "" {
+		log.Fatal("The environment variables SERVICE_ACCOUNT_EMAIL and SERVICE_ACCOUNT_PASS are required.")
+	}
+	log.Printf("Loding Account Service email configurations: %s", serviceEmail)
 
-		user := os.Getenv(userEnvKey)
-		pass := os.Getenv(passEnvKey)
+	senderNamesEnv := os.Getenv("SENDER_NAMES")
+	if senderNamesEnv == "" {
+		log.Fatal("The variable SENDER_NAMES is required (ex: 'compras, financeiro').")
+	}
+	senderNames := strings.Split(senderNamesEnv, ",")
 
-		if user == "" || pass == "" {
-			log.Fatalf("Environment variables %s and %s must be set for sender '%s'", userEnvKey, passEnvKey, senderName)
+	for _, name := range senderNames {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
 		}
 
-		senderConfigs[senderName] = SenderConfig{
-			GmailUser:     user,
-			GmailPassword: pass,
+		fromEmailEnvKey := fmt.Sprintf("SENDER_%s_EMAIL", strings.ToUpper(name))
+		fromEmail := os.Getenv(fromEmailEnvKey)
+
+		if fromEmail == "" {
+			log.Fatalf("Email not configured for sender '%s'. Define a var %s", name, fromEmailEnvKey)
 		}
-		log.Printf("Loaded configuration for sender: %s", senderName)
+
+		senderConfigs[name] = SenderConfig{
+			FromEmail:              fromEmail,
+			ServiceAccountEmail:    serviceEmail,
+			ServiceAccountPassword: servicePassword,
+			Provider:               provider,
+		}
+		log.Printf("-> Configuring sender '%s' to send as '%s'", name, fromEmail)
 	}
 }
 
 func sendEmailHtmlFormat(config SenderConfig, to, subject, body, filename, attachment string) error {
 	m := gomail.NewMessage()
 
-	m.SetHeader("From", config.GmailUser)
+	m.SetHeader("From", config.FromEmail)
 	m.SetHeader("To", to)
-	//m.SetAddressHeader("Cc", "") #caso tenha algum
 	m.SetHeader("Subject", subject)
 	m.SetBody("text/html", body)
 
@@ -85,12 +116,24 @@ func sendEmailHtmlFormat(config SenderConfig, to, subject, body, filename, attac
 		}))
 	}
 
-	// send email
-	port, _ := strconv.Atoi(stmpPort)
-	d := gomail.NewDialer(smtpHost, port, config.GmailUser, config.GmailPassword)
+	smtpConfig, ok := smtpConfigs[config.Provider]
+	if !ok {
+		return fmt.Errorf("unknown email provider: %s", config.Provider)
+	}
+
+	port, _ := strconv.Atoi(smtpConfig.Port)
+
+	d := gomail.NewDialer(smtpConfig.Host, port, config.ServiceAccountEmail, config.ServiceAccountPassword)
+
+	if config.Provider == "office365" {
+		d.TLSConfig = &tls.Config{
+			ServerName: smtpConfig.Host,
+			MinVersion: tls.VersionTLS12,
+		}
+	}
 
 	if err := d.DialAndSend(m); err != nil {
-		return fmt.Errorf("failed to send email: %w", err)
+		return fmt.Errorf("failed to send email as '%s' via provider '%s': %w", config.FromEmail, config.Provider, err)
 	}
 
 	return nil
@@ -165,9 +208,12 @@ func main() {
 		log.Fatalf("error on creating trusted proxies: %v", err)
 	}
 
-	router.POST("/send-email-compras", createEmailHandler("compras"))
-	router.POST("/send-email-financeiro", createEmailHandler("financeiro"))
-	router.POST("/send-email-controle", createEmailHandler("controle"))
+	for name := range senderConfigs {
+		endpoint := fmt.Sprintf("/send-email-%s", name)
+
+		router.POST(endpoint, createEmailHandler(name))
+		log.Printf("Endpoint registred: POST %s", endpoint)
+	}
 
 	router.GET("/get-ip", getIpHandler)
 

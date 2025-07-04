@@ -22,34 +22,39 @@ spec:
           ports:
             - containerPort: 8080
           env:
-            - name: SENDER_COMPRAS_USER
+            - name: SENDER_PROVIDER
               valueFrom:
                 secretKeyRef:
-                  name: gmail-compras-credentials
-                  key: username
-            - name: SENDER_COMPRAS_PASS
+                  name: email-credentials
+                  key: sender-provider
+            - name: SENDER_NAMES
               valueFrom:
                 secretKeyRef:
-                  name: gmail-compras-credentials
-                  key: password
-            - name: SENDER_FINANCEIRO_USER
+                  name: email-credentials
+                  key: sender-names
+            - name: SERVICE_ACCOUNT_EMAIL
               valueFrom:
                 secretKeyRef:
-                  name: gmail-financeiro-credentials
-                  key: username
-            - name: SENDER_FINANCEIRO_PASS
+                  name: email-credentials
+                  key: service-account-email
+            - name: SERVICE_ACCOUNT_PASS
               valueFrom:
                 secretKeyRef:
-                  name: gmail-financeiro-credentials
-                  key: password
-            - name: SENDER_CONTROLE_USER
+                  name: email-credentials
+                  key: service-account-pass
+            - name: SENDER_COMPRAS_EMAIL
               valueFrom:
                 secretKeyRef:
-                  name: gmail-controle-credentials
-                  key: username
-            - name: SENDER_CONTROLE_PASS
+                  name: email-credentials
+                  key: sender-compras-email
+            - name: SENDER_FINANCEIRO_EMAIL
               valueFrom:
                 secretKeyRef:
-                  name: gmail-controle-credentials
-                  key: password
+                  name: email-credentials
+                  key: sender-financeiro-email
+            - name: SENDER_CONTROLE_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: email-credentials
+                  key: sender-controle-email
       restartPolicy: Always
