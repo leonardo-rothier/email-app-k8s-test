@@ -18,7 +18,8 @@ spec:
     spec:
       containers:
         - name: email-service
-          image: leonardorothier/email-service:v3
+          image: leonardorothier/email-service:v4
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           env:
